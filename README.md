@@ -1,14 +1,29 @@
-# SOC-Lab
-
 # Active Directory Home Lab Project (VirtualBox)
-
+# Enterprise Active Directory & Linux Integration Lab (VirtualBox)
 A hands-on Active Directory lab environment built using Oracle VM VirtualBox. This project demonstrates core enterprise networking and identity management concepts, including Active Directory Domain Services (AD DS), DNS, DHCP configuration, user provisioning, and virtual network segmentation.
-
+A comprehensive hands-on hybrid Active Directory lab environment built using Oracle VM VirtualBox. This project demonstrates enterprise identity management, cross-platform Linux domain integration via Kerberos & Samba Winbind, centralized DNS/DHCP infrastructure, and internal application services (Docker-hosted MailHog with automated Python/Bash notification pipelines).
 ---
-
 ## 🖥️ Lab Environment & Topology
-
+## 🏛️ Lab Architecture & Network Topology
 ### Domain Controller (DC) Specifications
+```
+                                  [ lab-x-network ]
+                             NAT Network: 10.0.0.0/24
+                                Gateway: 10.0.0.1
+                                        │
+      ┌──────────────────┬──────────────┴───────────────┬──────────────────┐
+      │                  │                              │                  │
+┌─────▼──────────┐ ┌─────▼───────────────┐ ┌────────────▼──────┐ ┌─────────▼──────────────┐
+│ Domain Cont.   │ │ Windows Client      │ │ Ubuntu Client     │ │ Ubuntu Corp Server     │
+│ CORP           │ │ John Doe (johnd)    │ │ Jane Doe (janed)  │ │ lab-x-admin            │
+│ 10.0.0.5       │ │ 10.0.0.100          │ │ 10.0.0.101        │ │ 10.0.0.8               │
+│ AD DS, DNS,    │ │ Windows OS          │ │ Ubuntu Linux      │ │ Docker + MailHog       │
+│ DHCP Server    │ │ Domain Member       │ │ Samba Winbind AD  │ │ (SMTP: 1025 / UI: 8025)│
+└────────────────┘ └─────────────────────┘ └───────────────────┘ └────────────────────────┘
+```
+### 1. Domain Controller (DC)
+- **Hostname:** `CORP`
+- **Domain Name:** `lab-x-dc` (FQDN: `corp.lab-x-dc.com`)
 - **Virtualization Software:** Oracle VM VirtualBox
 - **ISO / OS Version:** Windows Server 2025 ISO (Operating System: Windows Server 2022)
 - **Hostname:** `CORP`
@@ -17,84 +32,115 @@ A hands-on Active Directory lab environment built using Oracle VM VirtualBox. Th
 - **RAM:** 4 GB
 - **Storage:** 50 GB
 - **IP Address:** `10.0.0.5`
+- **Hardware Allocation:** 2 Cores CPU, 4 GB RAM, 50 GB Storage
+- **Static IP Address:** `10.0.0.5/24`
 - **Default Gateway:** `10.0.0.1`
 - **Subnet Mask:** `255.255.255.0` (`/24`)
 - **Active Server Roles:** Active Directory Domain Services (AD DS), DNS, DHCP
-
+- **Active Server Roles:** Active Directory Domain Services (AD DS), DNS Server, DHCP Server
+### 2. Network & Subnet Configuration
+- **VirtualBox NAT Network:** `lab-x-network` (`10.0.0.0/24`)
+- **Gateway / Virtual Router:** `10.0.0.1`
+- **DHCP Scope:** `10.0.0.100` – `10.0.0.200`
+- **Primary DNS:** `10.0.0.5` (`CORP.lab-x-dc.com`)
 ---
-
 ## 🌐 Network Configuration
-
+## 👥 Provisioned Systems & Accounts
 ### VirtualBox Custom NAT Network
 - **Network Name:** `lab-x-network`
 - **IPv4 Prefix:** `10.0.0.0/24` (usable range: `10.0.0.1` – `10.0.0.254`, broadcast: `10.0.0.255`)
 - **Gateway IP:** `10.0.0.1`
-
+| Hostname / Machine | OS | IP Address | Account ID / UPN | Role / Services |
+| :--- | :--- | :--- | :--- | :--- |
+| **CORP** | Windows Server 2022 | `10.0.0.5` | `Administrator@corp.lab-x-dc.com` | Primary Domain Controller, DNS, DHCP |
+| **Windows Client** | Windows | `10.0.0.100` | `johnd@corp.lab-x-dc.com` | Domain-joined workstation (John Doe) |
+| **linux-client** | Ubuntu Linux | `10.0.0.101` | `janed@linux-client` | Domain-joined Linux client (Jane Doe) + Mail Watcher |
+| **corp-svr** | Ubuntu Linux | `10.0.0.8` | `lab-x-admin@corp-svr` | Corporate Application Server (Docker + MailHog) |
 ### DHCP Scope Settings
 - **DHCP Pool Range:** `10.0.0.100` – `10.0.0.200`
 - **Subnet:** `10.0.0.0/24`
 - **DNS Server:** `10.0.0.5` (DC: `CORP`)
 - **Router / Gateway:** `10.0.0.1`
-
 ---
-
+## 🐧 Cross-Platform Linux Domain Integration (Samba Winbind + Kerberos)
+Ubuntu Linux clients are joined to the Active Directory domain controller using **Kerberos (`krb5-user`)**, **Samba**, and **Winbind**, enabling centralized Active Directory authentication and automatic home directory creation for Linux sessions.
+### Step 1: DNS Resolution & Kerberos Configuration
+Ensure `/etc/resolv.conf` points directly to the Windows Domain Controller:
+```ini
+nameserver 10.0.0.5
+search corp.lab-x-dc.com
+```
+Register the domain realm with `krb5-config` / `/etc/krb5.conf`:
+```ini
+[libdefaults]
+    default_realm = CORP.LAB-X-DC.COM
+    dns_lookup_realm = false
+    dns_lookup_kdc = true
+```
+### Step 2: Samba & Winbind Configuration (`/etc/samba/smb.conf`)
+Configure Samba for Active Directory Security (`ads`) mode and autorid mapping:
+```ini
+[global]
+   kerberos method = secrets and keytab
+   realm = CORP.LAB-X-DC.COM
+   workgroup = CORP
+   security = ads
+   template shell = /bin/bash
+   winbind enum groups = Yes
+   winbind enum users = Yes
+   winbind separator = +
+   idmap config * : rangesize = 1000000
+   idmap config * : range = 1000000-19999999
+   idmap config * : backend = autorid
+```
+### Step 3: Name Service Switch Configuration (`/etc/nsswitch.conf`)
+Enable Winbind for user and group lookups:
+```text
+passwd:         files systemd sss winbind
+group:          files systemd sss winbind
+```
+### Step 4: Automatic Home Directory Generation & Domain Join
+Enable PAM home directory creation:
+```bash
+sudo pam-auth-update --enable mkhomedir
+```
+Join the Linux client to the Windows Server Domain:
+```bash
+sudo net ads join -U Administrator
+```
+Restart and verify services:
+```bash
+sudo systemctl restart smbd nmbd winbind
+wbinfo -u   # Lists AD domain users
+wbinfo -g   # Lists AD domain groups
+```
+---
 ## 👥 Accounts & Provisioning
-
+## 📧 Corporate Mail Infrastructure & Automation Pipeline
 | Account Name | Username | Role / Description |
 | :--- | :--- | :--- |
 | **Administrator** | `Administrator` | Built-in Domain Administrator for AD / DC management |
 | **John Doe** | `johnd` | Standard domain user client account |
 | **Jane Doe** | `janed` | Standard domain user client account |
-
----
-
-## 🔌 VirtualBox Network Adapter Modes Overview
-
-VirtualBox provides several networking modes depending on how you want virtual machines to communicate with each other, the host machine, and the outside internet:
-
-- **NAT (Network Address Translation):**
-  The default mode. The VM gets outbound internet access through the host's IP address, but external devices and other VMs cannot directly connect to it.
-
-- **NAT Network:**
-  Similar to NAT, but creates an internal virtual router allowing multiple VMs assigned to the same NAT Network to communicate with one another while still having outbound internet access.
-
-- **Bridged Adapter:**
-  Connects the VM directly to the physical network of the host. The VM receives its own dedicated IP address from the physical network's router (e.g., home Wi-Fi router) and appears as a separate physical device on the local network.
-
-- **Internal Network:**
-  Creates an isolated private network strictly between VMs on the same host. VMs can only talk to each other; they cannot access the host machine or the internet.
-
-- **Host-Only Adapter:**
-  Creates a private network between the host machine and the VMs. VMs can talk to each other and the host, but have no access to the outside internet unless routed specifically.
-
----
-
-## 🛡️ Active Directory Core Concepts
-
-### The 3 Main Components of Active Directory
-
-1. **Authentication:**
-   Verifies identity ("Who are you?"). Checks user credentials via protocols like Kerberos and NTLM when logging into a domain machine or service.
-
-2. **Authorization:**
-   Determines permissions ("What are you allowed to do?"). Checks whether an authenticated user has rights to access specific folders, files, or administrative tools based on group memberships and access control lists (ACLs).
-
-3. **Management:**
-   Centralizes control of network objects (users, computers, printers, and organizational units) across the entire enterprise from a single administrative interface.
-
----
-
-### Key Strengths of Active Directory
-
-- **Centralized Management:** Administrators manage users, passwords, devices, and permissions across thousands of machines from one place rather than configuring each machine individually.
-- **Scalability:** Easily grows from a small lab environment to large enterprise networks containing millions of objects across multiple sites and domains.
-- **Group Policy (GPO):** Enforces security baselines, software installations, password policies, and desktop settings automatically across all domain-joined computers.
-- **Seamless Service Integration:** Integrates natively with critical infrastructure services like DNS, DHCP, file shares, Certificate Services, and cloud platforms (Microsoft Entra ID / Office 365).
-
----
-
-### Why Active Directory is a Prime Target for Attackers
-
-- **"Keys to the Kingdom":** Gaining Domain Admin privileges gives attackers complete control over every domain-joined computer, server, and user identity across the entire organization.
-- **High Privilege Consolidation:** AD stores sensitive credential hashes, Kerberos tickets, and privilege maps, making it a primary target for credential harvesting, lateral movement, and privilege escalation (e.g., Pass-the-Hash, Kerberoasting, Golden Ticket attacks).
-- **Misconfiguration Exposure:** Because large Active Directory environments are complex and often accumulate legacy settings, weak permissions, and outdated protocols, attackers frequently find paths to escalate privileges.
+The server `corp-svr` (`10.0.0.8`) hosts a mock corporate mail pipeline using **Docker** and **MailHog** (SMTP on port `1025`, Web UI / API on port `8025`).
+### 1. Python SMTP Test Email Dispatcher (`corp-svr`)
+A Python script sends test transactional email notifications through the local MailHog SMTP relay:
+```python
+import smtplib
+from email.message import EmailMessage
+msg = EmailMessage()
+msg.set_content("This is a test email from Ubuntu VM.")
+msg["Subject"] = "Hello World from MailHog!"
+msg["From"] = "corpserver@example.com"
+msg["To"] = "user@example.com"
+# Connect to MailHog SMTP service
+with smtplib.SMTP("localhost", 1025) as server:
+    server.send_message(msg)
+```
+### 2. Automated Mail Watcher & Polling Service (`janed@linux-client`)
+On `linux-client` (`10.0.0.101`), Jane Doe runs an automated daemon script that polls the MailHog REST API v2 every 30 seconds, parses JSON payloads using `jq`, tracks seen message IDs, and alerts the user upon receiving new emails:
+```bash
+#!/bin/bash
+MAILHOG_IP="10.0.0.8"  
+TO_EMAIL="janed"
+POLL_INTERVAL=30  # seconds
