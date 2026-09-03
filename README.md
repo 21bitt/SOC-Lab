@@ -16,73 +16,86 @@ graph TD
 
     GW --- LINUX["<b>Ubuntu Client (Jane Doe)</b><br/>IP: 10.0.0.101 (DHCP)<br/>User: janed@linux-client<br/>Role: Samba Winbind AD Member + Mail Watcher<br/>Specs: 1 CPU / 2GB RAM / 50GB Storage"]
 
-    GW --- CORP["<b>Ubuntu Corp Server (lab-x-admin)</b><br/>IP: 10.0.0.8 (Static)<br/>User: lab-x-admin@corp-svr<br/>Role: App Server (Docker + MailHog SMTP/Web)<br/>Specs: 1 CPU / 2GB RAM / 25GB Storage"]
+    GW --- CORP["<b>Ubuntu Corp Server (corp-svr)</b><br/>IP: 10.0.0.8 (Static)<br/>OS: Ubuntu Desktop 22.04 LTS<br/>Role: Corporate Desktop / MailHog Docker Host<br/>Specs: 1 CPU / 2GB RAM / 50GB Storage"]
+
+    GW --- EMAIL["<b>Ubuntu Email Server (email-svr)</b><br/>IP: 10.0.0.8 (Static / Dedicated Role)<br/>OS: Ubuntu Server 22.04 LTS<br/>Role: Dedicated Mail Server Infrastructure<br/>Specs: 1 CPU / 2GB RAM / 25GB Storage"]
 ```
 
-
-
 ---
-
-
 
 ### Network & Subnet Summary
 
----
+| Parameter | Configuration | Details |
+| :--- | :--- | :--- |
+| **VirtualBox Network Mode** | Custom NAT Network | Network Name: `lab-x-network` |
+| **Network Subnet** | `10.0.0.0/24` | Usable Host Range: `10.0.0.1` – `10.0.0.254` |
+| **Default Gateway** | `10.0.0.1` | VirtualBox NAT Gateway router |
+| **Primary DNS Server** | `10.0.0.5` | Pointed to Domain Controller (`CORP`) |
+| **DHCP Distribution Pool** | `10.0.0.100` – `10.0.0.200` | Managed by Windows Server DHCP role on `CORP` |
 
+---
 
 ## 👥 Provisioned Systems & Accounts
 
-
-| Hostname / Machine | OS                   | Hardware Specs                      | IP Address   | Account ID / UPN                  | Role / Services                                      |
-| ------------------ | -------------------- | ----------------------------------- | ------------ | --------------------------------- | ---------------------------------------------------- |
-| **CORP**           | Windows Server 2022  | 2 CPU / 4096 MB RAM / 50 GB Storage | `10.0.0.5`   | `Administrator@corp.lab-x-dc.com` | Primary Domain Controller, DNS, DHCP                 |
-| **Windows Client** | Windows Client       | 3 CPU / 4096 MB RAM / 80 GB Storage | `10.0.0.100` | `johnd@corp.lab-x-dc.com`         | Domain-joined workstation (John Doe)                 |
-| **linux-client**   | Ubuntu Desktop 22.04 | 1 CPU / 2048 MB RAM / 50 GB Storage | `10.0.0.101` | `janed@linux-client`              | Domain-joined Linux client (Jane Doe) + Mail Watcher |
-| **corp-svr**       | Ubuntu Server 22.04  | 1 CPU / 2048 MB RAM / 25 GB Storage | `10.0.0.8`   | `lab-x-admin@corp-svr`            | Corporate Application Server (Docker + MailHog)      |
-
+| Hostname / Machine | OS | Hardware Specs | IP Address | Account ID / UPN | Role / Services |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **CORP** | Windows Server 2022 | 2 CPU / 4096 MB RAM / 50 GB Storage | `10.0.0.5` | `Administrator@corp.lab-x-dc.com` | Primary Domain Controller, DNS, DHCP |
+| **Windows Client** | Windows Client | 3 CPU / 4096 MB RAM / 80 GB Storage | `10.0.0.100` | `johnd@corp.lab-x-dc.com` | Domain-joined workstation (John Doe) |
+| **linux-client** | Ubuntu Desktop 22.04 LTS | 1 CPU / 2048 MB RAM / 50 GB Storage | `10.0.0.101` | `janed@linux-client` | Domain-joined Linux client (Jane Doe) + Mail Watcher |
+| **corp-svr** | Ubuntu Desktop 22.04 LTS | 1 CPU / 2048 MB RAM / 50 GB Storage | `10.0.0.8` | `lab-x-admin@corp-svr` | Corporate Desktop / MailHog Docker Host |
+| **email-svr** | Ubuntu Server 22.04 LTS | 1 CPU / 2048 MB RAM / 25 GB Storage | `10.0.0.8` | `lab-x-admin@email-svr` | Dedicated Mail Server Backend |
 
 ---
-
-
 
 ### Hardware & Virtual Machine Breakdown
 
-1. **Domain Controller (**`CORP`**):**
-  - **OS:** Windows Server 2022 (Windows Server 2025 ISO)
-  - **Hardware Allocation:** 2 CPU Cores, 4096 MB (4 GB) RAM, 50 GB Storage
-  - **IP Address:** `10.0.0.5` (Static)
-2. **Windows Client (**`John Doe`**):**
-  - **OS:** Windows Client
-  - **Hardware Allocation:** 3 CPU Cores, 4096 MB (4 GB) RAM, 80 GB Storage
-  - **IP Address:** `10.0.0.100` (DHCP Assigned)
-3. **Ubuntu Desktop Client (**`linux-client` **/** `Jane Doe`**):**
-  - **OS:** Ubuntu Desktop 22.04 LTS
-  - **Hardware Allocation:** 1 CPU Core, 2048 MB (2 GB) RAM, 50 GB Storage
-  - **IP Address:** `10.0.0.101` (DHCP Assigned)
-4. **Ubuntu Corporate Server (**`corp-svr` **/** `lab-x-admin`**):**
-  - **OS:** Ubuntu Server 22.04 LTS
-  - **Hardware Allocation:** 1 CPU Core, 2048 MB (2 GB) RAM, 25 GB Storage
-  - **IP Address:** `10.0.0.8` (Static / App Server)
+1. **Domain Controller (`CORP`):**
+   - **OS:** Windows Server 2022 (Windows Server 2025 ISO)
+   - **Hardware Allocation:** 2 CPU Cores, 4096 MB (4 GB) RAM, 50 GB Storage
+   - **IP Address:** `10.0.0.5` (Static)
+   - **Functions:** AD DS, DNS, DHCP Scope (`10.0.0.100`–`10.0.0.200`)
+
+2. **Windows Client (`John Doe`):**
+   - **OS:** Windows Client
+   - **Hardware Allocation:** 3 CPU Cores, 4096 MB (4 GB) RAM, 80 GB Storage
+   - **IP Address:** `10.0.0.100` (DHCP Assigned)
+   - **Account:** `johnd@corp.lab-x-dc.com`
+
+3. **Ubuntu Desktop Client (`linux-client` / `Jane Doe`):**
+   - **OS:** Ubuntu Desktop 22.04 LTS
+   - **Hardware Allocation:** 1 CPU Core, 2048 MB (2 GB) RAM, 50 GB Storage
+   - **IP Address:** `10.0.0.101` (DHCP Assigned)
+   - **Account:** `janed@linux-client`
+   - **Function:** Samba Winbind Domain Member + Automated Mail Watcher Service
+
+4. **Ubuntu Corporate Desktop / Docker Host (`corp-svr`):**
+   - **OS:** Ubuntu Desktop 22.04 LTS
+   - **Hardware Allocation:** 1 CPU Core, 2048 MB (2 GB) RAM, 50 GB Storage
+   - **IP Address:** `10.0.0.8`
+   - **Account:** `lab-x-admin@corp-svr`
+   - **Function:** Hosts Docker container running MailHog (SMTP on port 1025, Web UI/API on port 8025)
+
+5. **Ubuntu Dedicated Mail Server (`email-svr`):**
+   - **OS:** Ubuntu Server 22.04 LTS
+   - **Hardware Allocation:** 1 CPU Core, 2048 MB (2 GB) RAM, 25 GB Storage
+   - **IP Address:** `10.0.0.8`
+   - **Account:** `lab-x-admin@email-svr`
+   - **Function:** Dedicated corporate email backend server
 
 ---
 
-
-
 ## 🐧 Cross-Platform Linux Domain Integration (Samba Winbind + Kerberos)
 
-Ubuntu Linux clients are joined to the Active Directory domain controller using **Kerberos (**`krb5-user`**)**, **Samba**, and **Winbind**, enabling centralized Active Directory authentication and automatic home directory creation for Linux sessions.
+Ubuntu Linux clients are joined to the Active Directory domain controller using **Kerberos (`krb5-user`)**, **Samba**, and **Winbind**, enabling centralized Active Directory authentication and automatic home directory creation for Linux sessions.
 
 ### Step 1: DNS Resolution & Kerberos Configuration
-
 Ensure `/etc/resolv.conf` points directly to the Windows Domain Controller:
-
 ```ini
 nameserver 10.0.0.5
 search corp.lab-x-dc.com
 ```
 
 Register the domain realm with `krb5-config` / `/etc/krb5.conf`:
-
 ```ini
 [libdefaults]
     default_realm = CORP.LAB-X-DC.COM
@@ -90,12 +103,8 @@ Register the domain realm with `krb5-config` / `/etc/krb5.conf`:
     dns_lookup_kdc = true
 ```
 
-
-
 ### Step 2: Samba & Winbind Configuration (`/etc/samba/smb.conf`)
-
 Configure Samba for Active Directory Security (`ads`) mode and autorid mapping:
-
 ```ini
 [global]
    kerberos method = secrets and keytab
@@ -111,35 +120,25 @@ Configure Samba for Active Directory Security (`ads`) mode and autorid mapping:
    idmap config * : backend = autorid
 ```
 
-
-
 ### Step 3: Name Service Switch Configuration (`/etc/nsswitch.conf`)
-
 Enable Winbind for user and group lookups:
-
 ```text
 passwd:         files systemd sss winbind
 group:          files systemd sss winbind
 ```
 
-
-
 ### Step 4: Automatic Home Directory Generation & Domain Join
-
 Enable PAM home directory creation:
-
 ```bash
 sudo pam-auth-update --enable mkhomedir
 ```
 
 Join the Linux client to the Windows Server Domain:
-
 ```bash
 sudo net ads join -U Administrator
 ```
 
 Restart and verify services:
-
 ```bash
 sudo systemctl restart smbd nmbd winbind
 wbinfo -u   # Lists AD domain users
@@ -148,14 +147,11 @@ wbinfo -g   # Lists AD domain groups
 
 ---
 
-
-
 ## 📧 Corporate Mail Infrastructure & Automation Pipeline
 
-The server `corp-svr` (`10.0.0.8`) hosts a mock corporate mail pipeline using **Docker** and **MailHog** (SMTP on port `1025`, Web UI / API on port `8025`).
+The corporate mail pipeline uses **Docker** and **MailHog** (SMTP on port `1025`, Web UI / API on port `8025`).
 
 ### 1. Python SMTP Test Email Dispatcher (`corp-svr`)
-
 A Python script sends test transactional email notifications through the local MailHog SMTP relay:
 
 ```python
@@ -173,11 +169,8 @@ with smtplib.SMTP("localhost", 1025) as server:
     server.send_message(msg)
 ```
 
-
-
 ### 2. Automated Mail Watcher & Polling Service (`janed@linux-client`)
-
-On `linux-client` (`10.0.0.101`), Jane Doe runs an automated daemon script that polls the MailHog REST API v2 every 30 seconds, parses JSON payloads using `jq`, tracks seen message IDs, and alerts the user upon receiving new emails:
+On `linux-client` (`10.0.0.101`), Jane Doe runs an automated daemon script that polls the MailHog REST API v2 on `10.0.0.8:8025` every 30 seconds, parses JSON payloads using `jq`, tracks seen message IDs, and alerts the user upon receiving new emails:
 
 ```bash
 #!/bin/bash
@@ -220,43 +213,41 @@ done
 
 ---
 
-
-
 ## 🔌 VirtualBox Network Adapter Modes Overview
 
 VirtualBox provides several networking modes depending on how you want virtual machines to communicate with each other, the host machine, and the outside internet:
 
 - **NAT (Network Address Translation):**
-The default mode. The VM gets outbound internet access through the host's IP address, but external devices and other VMs cannot directly connect to it.
+  The default mode. The VM gets outbound internet access through the host's IP address, but external devices and other VMs cannot directly connect to it.
+
 - **NAT Network:**
-Creates an internal virtual router allowing multiple VMs assigned to the same NAT Network to communicate with one another while still having outbound internet access. *(Used for this lab)*.
+  Creates an internal virtual router allowing multiple VMs assigned to the same NAT Network to communicate with one another while still having outbound internet access. *(Used for this lab)*.
+
 - **Bridged Adapter:**
-Connects the VM directly to the physical network of the host. The VM receives its own dedicated IP address from the physical network's router (e.g., home Wi-Fi router) and appears as a separate physical device on the local network.
+  Connects the VM directly to the physical network of the host. The VM receives its own dedicated IP address from the physical network's router (e.g., home Wi-Fi router) and appears as a separate physical device on the local network.
+
 - **Internal Network:**
-Creates an isolated private network strictly between VMs on the same host. VMs can only talk to each other; they cannot access the host machine or the internet.
+  Creates an isolated private network strictly between VMs on the same host. VMs can only talk to each other; they cannot access the host machine or the internet.
+
 - **Host-Only Adapter:**
-Creates a private network between the host machine and the VMs. VMs can talk to each other and the host, but have no access to the outside internet unless routed specifically.
+  Creates a private network between the host machine and the VMs. VMs can talk to each other and the host, but have no access to the outside internet unless routed specifically.
 
 ---
 
-
-
 ## 🛡️ Active Directory Core Concepts
-
-
 
 ### The 3 Main Components of Active Directory
 
 1. **Authentication:**
-  Verifies identity (*"Who are you?"*). Checks user credentials via protocols like Kerberos and NTLM when logging into a domain machine or service.
+   Verifies identity (*"Who are you?"*). Checks user credentials via protocols like Kerberos and NTLM when logging into a domain machine or service.
+
 2. **Authorization:**
-  Determines permissions (*"What are you allowed to do?"*). Checks whether an authenticated user has rights to access specific folders, files, or administrative tools based on group memberships and access control lists (ACLs).
+   Determines permissions (*"What are you allowed to do?"*). Checks whether an authenticated user has rights to access specific folders, files, or administrative tools based on group memberships and access control lists (ACLs).
+
 3. **Management:**
-  Centralizes control of network objects (users, computers, printers, and organizational units) across the entire enterprise from a single administrative interface.
+   Centralizes control of network objects (users, computers, printers, and organizational units) across the entire enterprise from a single administrative interface.
 
 ---
-
-
 
 ### Key Strengths of Active Directory
 
@@ -267,8 +258,6 @@ Creates a private network between the host machine and the VMs. VMs can talk to 
 
 ---
 
-
-
 ### Why Active Directory is a Prime Target for Attackers
 
 - **"Keys to the Kingdom":** Gaining Domain Admin privileges gives attackers complete control over every domain-joined computer, server, and user identity across the entire organization.
@@ -277,12 +266,8 @@ Creates a private network between the host machine and the VMs. VMs can talk to 
 
 ---
 
-
-
 ## 💡 Key Skills & Technologies Demonstrated
-
 - **Directory Services & Identity:** Windows Server 2022 AD DS, Kerberos Authentication, NTLM, Domain User Provisioning.
 - **Cross-Platform Integration:** Linux/Ubuntu integration with Active Directory using Samba, Winbind, PAM (`mkhomedir`), and NSSwitch.
 - **Enterprise Network Infrastructure:** VirtualBox NAT Networks, Static IP Assignment, Windows DHCP Scope Configuration, DNS forwarders and SRV records.
 - **DevOps & Service Automation:** Docker container deployment (MailHog), Python SMTP automation, Bash daemon scripting with REST API consumption (`curl`, `jq`).
-
