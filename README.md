@@ -75,7 +75,7 @@ flowchart LR
 | **lab-x-ubu-client** | Ubuntu Desktop 22.04 LTS | 1 CPU / 2048 MB RAM / 50 GB | `10.0.0.101` | `janed@linux-client` | Domain-joined Linux client and mail watcher |
 | **corp-svr** | Ubuntu Desktop 22.04 LTS | 1 CPU / 2048 MB RAM / 50 GB | `10.0.0.8` | `lab-x-admin@corp-svr` | Corporate desktop and MailHog Docker host |
 | **email-svr** | Ubuntu Server 22.04 LTS | 1 CPU / 2048 MB RAM / 25 GB | `10.0.0.8` | `lab-x-admin@email-svr` | Dedicated mail server |
-| **lab-x-sec-mon** | Ubuntu Desktop 22.04 LTS | Wazuh all-in-one host | `10.0.0.10` | Local admin on the Wazuh host | Wazuh Server, Indexer, and Dashboard |
+| **lab-x-sec-mon** | Ubuntu Desktop 22.04 LTS | 4096 MB RAM / 60 GB | `10.0.0.10` | Local admin on the Wazuh host | Wazuh Server, Indexer, and Dashboard |
 
 ### Hardware and Virtual Machine Breakdown
 
