@@ -1,6 +1,8 @@
-# Active Directory, Linux Integration, and Wazuh Security Lab (VirtualBox)
+# Lab-X Environment Build (VirtualBox)
 
-A hands-on enterprise lab built in Oracle VM VirtualBox. The environment covers Active Directory Domain Services, DNS, DHCP, Linux domain join with Kerberos and Samba Winbind, internal mail services, centralized security monitoring with Wazuh, and a Kali Linux host used for authorized attack-and-defend exercises on this same NAT network.
+How this lab is engineered: hosts, addressing, Active Directory, Linux domain join, mail, and Wazuh.
+
+Authorized attack-and-defend work on these VMs is summarized in [EXERCISE-OUTCOMES.md](EXERCISE-OUTCOMES.md) (findings, artifacts, and defenses). That file is not a step-by-step attack guide.
 
 ---
 
@@ -76,7 +78,7 @@ flowchart LR
 | **lab-x-dc / CORP** | Windows Server 2022 | 2 CPU / 4096 MB RAM / 50 GB | `10.0.0.5` | `Administrator@corp.lab-x-dc.com` | Domain controller, DNS, DHCP |
 | **lab-x-win-client** | Windows Client | 3 CPU / 4096 MB RAM / 80 GB | `10.0.0.100` | `johnd@corp.lab-x-dc.com` | Domain-joined Windows workstation |
 | **lab-x-ubu-client** | Ubuntu Desktop 22.04 LTS | 1 CPU / 2048 MB RAM / 50 GB | `10.0.0.101` | `janed@linux-client` | Domain-joined Linux client and mail watcher |
-| **corp-svr** | Ubuntu Desktop 22.04 LTS | 1 CPU / 2048 MB RAM / 50 GB | `10.0.0.8` | `lab-x-admin@corp-svr`; lab `root` SSH password set to `november` on purpose | Corporate desktop and MailHog Docker host |
+| **corp-svr** | Ubuntu Desktop 22.04 LTS | 1 CPU / 2048 MB RAM / 50 GB | `10.0.0.8` | `lab-x-admin@corp-svr` | Corporate desktop and MailHog Docker host |
 | **email-svr** | Ubuntu Server 22.04 LTS | 1 CPU / 2048 MB RAM / 25 GB | `10.0.0.8` | `lab-x-admin@email-svr` | Dedicated mail server |
 | **lab-x-sec-mon** | Ubuntu Desktop 22.04 LTS | Wazuh all-in-one host | `10.0.0.10` | Local admin on the Wazuh host | Wazuh Server, Indexer, and Dashboard |
 | **lab-x-kali** | Kali Linux | 2 CPU / 4096 MB RAM / 60 GB | `10.0.0.50` | Local Kali user | Attack workstation on `lab-x-network` |
@@ -88,6 +90,7 @@ flowchart LR
    - Hardware: 2 CPU cores, 4096 MB RAM, 50 GB storage
    - IP: `10.0.0.5` (static)
    - Functions: AD DS, DNS, DHCP scope `10.0.0.100` to `10.0.0.200`
+   - NetBIOS / DC name seen in the lab: `WIN-23NL888TQBS.corp.lab-x-dc.com`
 
 2. **Enterprise Workstation (`lab-x-win-client` / John Doe)**
    - OS: Windows Client
@@ -128,97 +131,7 @@ flowchart LR
    - OS: Kali Linux
    - Hardware: 2 CPU cores, 4096 MB RAM, 60 GB storage
    - IP: `10.0.0.50` on NAT network `lab-x-network`
-   - Function: Offensive testing host used against the lab domain and monitored endpoints
-
----
-
-## Initial Recon and Internal Phishing Exercise
-
-This section records an authorized attack-and-defend exercise on the lab VMs listed above. The work was done from `lab-x-kali` (`10.0.0.50`) against hosts on `lab-x-network`. It is not a guide for use outside this lab.
-
-The exercise had three goals:
-
-1. Map live hosts and services on the `/24`.
-2. Show how a weak SSH password on `corp-svr` leads to local access.
-3. Show how an internal mail service (MailHog) can be used to deliver a phishing lure to `janed`, and how a fake login page can capture a submitted password.
-
-### 1. Service discovery
-
-From Kali, a TCP service scan of ports 1 through 1000 was run across the lab subnet (Nmap 7.99, 21 Oct 2026). Eight addresses responded.
-
-| IP | Likely host | Notable open ports | What it showed |
-| :--- | :--- | :--- | :--- |
-| `10.0.0.1` | NAT gateway | 135/tcp (MSRPC), 445/tcp | Windows-style RPC and SMB on the virtual router path |
-| `10.0.0.2` | VirtualBox NIC | none in 1-1000 | Host up, no services in the scanned range |
-| `10.0.0.5` | `lab-x-dc` / `CORP` | 53, 88, 135, 139, 389, 445, 464, 593, 636 | AD DC: DNS (Simple DNS Plus), Kerberos, LDAP for `corp.lab-x-dc.com`, NetBIOS, RPC. NetBIOS name `WIN-23NL888TQBS` |
-| `10.0.0.8` | `corp-svr` | 22/tcp OpenSSH 8.9p1 Ubuntu | SSH only in this port range. MailHog ports were outside 1-1000 |
-| `10.0.0.10` | `lab-x-sec-mon` | 443/tcp HTTPS | TLS site redirects to `/app/login`. Header `osd-name: sec-mon` matches the Wazuh dashboard |
-| `10.0.0.101` | `lab-x-ubu-client` | 22/tcp OpenSSH 8.9p1, 25/tcp Postfix | SSH plus local SMTP. Nmap hostname `ubu-client` |
-| `10.0.0.7` | extra Debian/Kali-like host | 22/tcp OpenSSH 10.3p1, 80/tcp Apache 2.4.68 | Same service pair as the Kali box; treated as a second web/SSH listener on the NAT net |
-| `10.0.0.50` | `lab-x-kali` | 22/tcp OpenSSH 10.3p1, 80/tcp Apache 2.4.68 | The attack host (SSH and the phishing site later hosted here) |
-
-Takeaway from recon: the DC advertises a full AD port set, `corp-svr` exposes SSH, MailHog was not visible in ports 1-1000, and the Wazuh UI is on HTTPS 443.
-
-### 2. Weak SSH on `corp-svr`
-
-Port 22 on `10.0.0.8` was reachable. The `root` account was given the dictionary password `november` on purpose so this lab could show what a guessable SSH secret looks like. After that password was found, login as `root@corp-svr` succeeded.
-
-This is a configuration failure, not a software exploit:
-
-- Root SSH with a password was allowed.
-- The password was chosen from a common wordlist (`november`).
-- There was no account lockout that stopped repeated guesses in time.
-
-Do not reuse that password outside this lab. Prefer SSH keys, disable password root login, and alert on repeated failed SSH in Wazuh (`auth.log` is already in the Linux agent group).
-
-### 3. Local discovery after SSH
-
-On `corp-svr`, listening sockets were listed with `netstat -tuln`. Besides SSH (22) and local DNS/CUPS, two extra listeners were bound on all interfaces:
-
-| Port | Service in this lab |
-| :--- | :--- |
-| `1025/tcp` | MailHog SMTP |
-| `8025/tcp` | MailHog web UI and API |
-
-Those ports were not in the 1-1000 scan, so they only showed up after local access. The MailHog UI was opened in a browser at `http://10.0.0.8:8025`. Existing lab mail showed `janed@ubu-client` as a recipient.
-
-The send script on the host (`/home/mailhog/test_message.py`) posted through `localhost:1025` to `janed@ubu-client` from `corpserver@example.com`. That confirmed MailHog as an internal delivery path that does not require a real mail gateway.
-
-### 4. Internal phishing simulation
-
-A fake "Verify Your Password" page was hosted on Kali with Apache. The web service was started with:
-
-```bash
-sudo service apache2 start
-```
-
-The site was served at `http://10.0.0.50` (port 80). The lab files for this mock campaign are:
-
-- Page: [index.html](https://github.com/21bitt/SOC-Lab/blob/main/index.html)
-- Form handler: [process.php](https://github.com/21bitt/SOC-Lab/blob/main/process.php)
-
-The form asked for a username and password and posted them to `process.php`, which appended the submitted values to `creds.log` on the Kali host.
-
-A second mail was sent through MailHog SMTP (`localhost:1025` from the Kali side of the mail path used in the lab) to `janed@linux-client`. The message claimed to be HR/security, warned about a lockout, and linked to `http://10.0.0.50`.
-
-From the `janed` Ubuntu client, the link was opened on purpose and a test username and password were submitted. The same values then appeared in `creds.log` on Kali.
-
-This showed the full internal path:
-
-1. Weak admin SSH on the mail host.
-2. Unauthenticated MailHog UI and SMTP on the LAN.
-3. A known mailbox (`janed`).
-4. Apache on Kali serving the campaign files above.
-5. A user who trusts an internal-looking message and submits a password.
-
-### 5. Fixes this exercise supports
-
-- Disable root SSH passwords. Use keys and `PermitRootLogin prohibit-password` or `no`.
-- Use long, unique passwords (or no passwords) on every lab VM.
-- Do not bind MailHog SMTP/UI to `0.0.0.0` on a shared LAN. Keep it on localhost, or put it behind auth.
-- Treat port 8025/1025 as sensitive. They did not show up in a 1-1000 scan.
-- User training: unexpected "verify your password" mail with a raw IP link is phishing.
-- Detection: Wazuh Linux `auth.log` for SSH brute force; web/proxy or DNS logs for visits to `10.0.0.50`; mail logs for spoofed From headers.
+   - Function: Isolated tester VM on the same NAT network as the domain
 
 ---
 
@@ -523,5 +436,4 @@ VirtualBox has several adapter modes. They control how VMs talk to each other, t
 - Networking: VirtualBox NAT Network, static IPs, Windows DHCP, DNS
 - Mail lab: Docker, MailHog, Python SMTP, Bash polling with `curl` and `jq`
 - Security monitoring: Wazuh 4.9 all-in-one, agent groups, centralized `agent.conf`, Windows EventChannel and Linux syslog/audit collection
-- Attack host: Kali Linux on `lab-x-network` (`10.0.0.50`)
-- Attack-and-defend exercise: lab subnet service mapping, weak SSH on `corp-svr`, MailHog abuse, simulated phishing to `janed`
+- Tester VM: Kali Linux on `lab-x-network` (`10.0.0.50`)
